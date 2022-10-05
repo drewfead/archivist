@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"log"
 	"os"
 	"text/template"
@@ -16,12 +17,17 @@ import (
 )
 
 type searchConfig struct {
+	Interactive    bool
 	UseVimBindings bool
+	Timeout        time.Duration
 }
 
+var (
+	ErrNoSelectableResults = errors.New("no selectable results")
+)
+
 func search(ctx context.Context, term string, cfg searchConfig) error {
-	timeout := 15 * time.Second
-	surfCtx, surfCancel := context.WithTimeout(ctx, timeout)
+	surfCtx, surfCancel := context.WithTimeout(ctx, cfg.Timeout)
 	defer surfCancel()
 
 	stdout := output.Filtered(readline.Stdout, func(bytes []byte) bool {
@@ -45,8 +51,12 @@ func search(ctx context.Context, term string, cfg searchConfig) error {
 	}
 
 	selectedIndex, _, err := prompt.Run()
-	selectCtx, selectCancel := context.WithTimeout(ctx, timeout)
+	selectCtx, selectCancel := context.WithTimeout(ctx, cfg.Timeout)
 	defer selectCancel()
+
+	if len(links) <= selectedIndex {
+		return ErrNoSelectableResults
+	}
 
 	link := links[selectedIndex]
 	details, err := bluray.GetDetails(selectCtx, link.BlurayDotComDetailsLink)
@@ -68,19 +78,41 @@ func search(ctx context.Context, term string, cfg searchConfig) error {
 
 func main() {
 	app := &cli.App{
-		Flags: []cli.Flag{
-			&cli.BoolFlag{
-				Name:  "vim",
-				Usage: "use vim bindings in interactive mode",
+		Commands: []*cli.Command{
+			{
+				Name:    "search",
+				Aliases: []string{"s"},
+				Usage:   "search for discs",
+				Flags: []cli.Flag{
+					&cli.BoolFlag{
+						Name:    "vim",
+						Value:   false,
+						Usage:   "use vim bindings where applicable",
+						EnvVars: []string{"DISCS_VIM_MODE"},
+					},
+					&cli.BoolFlag{
+						Name:    "interactive",
+						Value:   true,
+						Usage:   "use interactive mode for search. gives access to extra data",
+						Aliases: []string{"i"},
+					},
+					&cli.DurationFlag{
+						Name:  "timeout",
+						Value: 15 * time.Second,
+						Usage: "set the timeout after which the CLI will fail",
+					},
+				},
+				Action: func(cCtx *cli.Context) error {
+					cfg := searchConfig{
+						UseVimBindings: cCtx.Bool("vim"),
+						Interactive:    cCtx.Bool("interactive"),
+						Timeout:        cCtx.Duration("timeout"),
+					}
+					return search(cCtx.Context, cCtx.Args().Get(0), cfg)
+				},
 			},
 		},
 		Name: "discs",
-		Action: func(cCtx *cli.Context) error {
-			cfg := searchConfig{
-				UseVimBindings: cCtx.Bool("vim"),
-			}
-			return search(cCtx.Context, cCtx.Args().Get(0), cfg)
-		},
 	}
 
 	if err := app.Run(os.Args); err != nil {
