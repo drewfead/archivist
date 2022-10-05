@@ -21,14 +21,14 @@ type searchConfig struct {
 
 func search(ctx context.Context, term string, cfg searchConfig) error {
 	timeout := 15 * time.Second
-	ctx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
+	surfCtx, surfCancel := context.WithTimeout(ctx, timeout)
+	defer surfCancel()
 
 	stdout := output.Filtered(readline.Stdout, func(bytes []byte) bool {
 		return len(bytes) != 1 || bytes[0] != readline.CharBell
 	})
 
-	links, err := bluray.Search(ctx, term)
+	links, err := bluray.Search(surfCtx, term)
 	if err != nil {
 		return err
 	}
@@ -41,11 +41,15 @@ func search(ctx context.Context, term string, cfg searchConfig) error {
 		Templates: promptTemplates,
 		Stdout:    stdout,
 		IsVimMode: cfg.UseVimBindings,
+		Size:      10,
 	}
 
 	selectedIndex, _, err := prompt.Run()
+	selectCtx, selectCancel := context.WithTimeout(ctx, timeout)
+	defer selectCancel()
+
 	link := links[selectedIndex]
-	details, err := bluray.GetDetails(ctx, link.BlurayDotComDetailsLink)
+	details, err := bluray.GetDetails(selectCtx, link.BlurayDotComDetailsLink)
 	if err != nil {
 		return err
 	}
