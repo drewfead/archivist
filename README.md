@@ -20,3 +20,5 @@ Discs currently supports interactive blu-ray searches by scraping blu-ray.com
 ```
 bin/discs <searchTerm>
 ```
+
+Support for vim bindings using `--vim`.

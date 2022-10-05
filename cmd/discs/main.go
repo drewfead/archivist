@@ -2,7 +2,7 @@ package main
 
 import (
 	"context"
-	"fmt"
+	"log"
 	"os"
 	"text/template"
 	"time"
@@ -12,49 +12,74 @@ import (
 
 	"github.com/chzyer/readline"
 	"github.com/manifoldco/promptui"
+	"github.com/urfave/cli/v2"
 )
 
-func main() {
+type searchConfig struct {
+	UseVimBindings bool
+}
+
+func search(ctx context.Context, term string, cfg searchConfig) error {
 	timeout := 15 * time.Second
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
 	stdout := output.Filtered(readline.Stdout, func(bytes []byte) bool {
 		return len(bytes) != 1 || bytes[0] != readline.CharBell
 	})
 
-	searchTerm := os.Args[1]
-	if searchTerm == "" {
-		os.Exit(1)
+	links, err := bluray.Search(ctx, term)
+	if err != nil {
+		return err
 	}
 
-	links, err := bluray.Search(ctx, searchTerm)
-	if err != nil {
-		fmt.Printf("failed %v\n", err)
-		return
-	}
+	promptTemplates.Help = helpForSearchConfig(cfg)
 
 	prompt := promptui.Select{
 		Label:     "Found discs",
 		Items:     links,
 		Templates: promptTemplates,
 		Stdout:    stdout,
+		IsVimMode: cfg.UseVimBindings,
 	}
 
 	selectedIndex, _, err := prompt.Run()
 	link := links[selectedIndex]
 	details, err := bluray.GetDetails(ctx, link.BlurayDotComDetailsLink)
 	if err != nil {
-		fmt.Printf("failed %v\n", err)
-		return
+		return err
 	}
 
 	outTemplate, err := template.New("detail").Parse(detailTemplate)
 	if err != nil {
-		fmt.Printf("failed %v\n", err)
+		return err
 	}
 	err = outTemplate.Execute(stdout, details)
 	if err != nil {
-		fmt.Printf("failed %v\n", err)
+		return err
+	}
+
+	return nil
+}
+
+func main() {
+	app := &cli.App{
+		Flags: []cli.Flag{
+			&cli.BoolFlag{
+				Name:  "vim",
+				Usage: "use vim bindings in interactive mode",
+			},
+		},
+		Name: "discs",
+		Action: func(cCtx *cli.Context) error {
+			cfg := searchConfig{
+				UseVimBindings: cCtx.Bool("vim"),
+			}
+			return search(cCtx.Context, cCtx.Args().Get(0), cfg)
+		},
+	}
+
+	if err := app.Run(os.Args); err != nil {
+		log.Fatal(err)
 	}
 }
