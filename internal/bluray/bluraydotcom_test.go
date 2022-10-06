@@ -27,6 +27,6 @@ func TestIntegration_FullSearch(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
 	}
-	out, _ := bluray.FullSearch(context.TODO(), "poltergeist")
+	out, _ := bluray.FullSearch(context.TODO(), 0, "star")
 	t.Log(out)
 }

@@ -3,13 +3,14 @@ package main
 import (
 	"context"
 	"errors"
-	"log"
 	"os"
 	"text/template"
 	"time"
 
 	"github.com/drewfead/archivist/internal/bluray"
 	"github.com/drewfead/archivist/internal/output"
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 
 	"github.com/chzyer/readline"
 	"github.com/manifoldco/promptui"
@@ -19,6 +20,7 @@ import (
 type searchConfig struct {
 	Interactive    bool
 	UseVimBindings bool
+	Parallelism    uint
 	Timeout        time.Duration
 }
 
@@ -34,7 +36,7 @@ func search(ctx context.Context, term string, cfg searchConfig) error {
 		return len(bytes) != 1 || bytes[0] != readline.CharBell
 	})
 
-	links, err := bluray.Search(surfCtx, term)
+	links, err := bluray.FullSearch(surfCtx, cfg.Parallelism, term)
 	if err != nil {
 		return err
 	}
@@ -51,6 +53,9 @@ func search(ctx context.Context, term string, cfg searchConfig) error {
 	}
 
 	selectedIndex, _, err := prompt.Run()
+	if err != nil {
+		return err
+	}
 	selectCtx, selectCancel := context.WithTimeout(ctx, cfg.Timeout)
 	defer selectCancel()
 
@@ -101,12 +106,33 @@ func main() {
 						Value: 15 * time.Second,
 						Usage: "set the timeout after which the CLI will fail",
 					},
+					&cli.UintFlag{
+						Name:  "parallelism",
+						Value: 0,
+						Usage: "bound the parallelism to use when fetching data. 0 or omit for unbounded",
+					},
+					&cli.BoolFlag{
+						Name:  "debug",
+						Value: false,
+						Usage: "whether to output debug logs",
+					},
 				},
 				Action: func(cCtx *cli.Context) error {
 					cfg := searchConfig{
 						UseVimBindings: cCtx.Bool("vim"),
 						Interactive:    cCtx.Bool("interactive"),
 						Timeout:        cCtx.Duration("timeout"),
+						Parallelism:    cCtx.Uint("parallelism"),
+					}
+					if cCtx.Bool("debug") {
+						zerolog.SetGlobalLevel(zerolog.DebugLevel)
+						log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
+					} else {
+						zerolog.SetGlobalLevel(zerolog.FatalLevel)
+						log.Logger = log.Output(zerolog.NewConsoleWriter(func(w *zerolog.ConsoleWriter) {
+							w.NoColor = true
+							w.PartsExclude = []string{zerolog.CallerFieldName, zerolog.LevelFieldName, zerolog.TimestampFieldName}
+						}))
 					}
 					return search(cCtx.Context, cCtx.Args().Get(0), cfg)
 				},
@@ -116,6 +142,7 @@ func main() {
 	}
 
 	if err := app.Run(os.Args); err != nil {
-		log.Fatal(err)
+		log.Fatal().
+			Msg(err.Error())
 	}
 }
