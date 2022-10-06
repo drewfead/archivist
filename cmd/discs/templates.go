@@ -17,18 +17,18 @@ var (
 	promptTemplates *promptui.SelectTemplates = &promptui.SelectTemplates{
 		Label: "{{  .  }}:",
 		Active: fmt.Sprintf(
-			"%s  {{  .ShortName  |  %s  }} {{  .PublishDate  |  %s  }}",
+			"%s  {{  .Name  |  %s  }} {{  .PublishDate  |  %s  }}",
 			discIcon,
 			focusColor,
 			faintColor,
 		),
 		Inactive: fmt.Sprintf(
-			"    {{  .ShortName  |  %s  }} {{  .PublishDate  |  %s  }}",
+			"    {{  .Name  |  %s  }} {{  .PublishDate  |  %s  }}",
 			faintColor,
 			faintColor,
 		),
 		Selected: fmt.Sprintf(
-			"%s  {{  .ShortName  |  %s  |  %s  }} {{  .PublishDate  |  %s  }}",
+			"%s  {{  .Name  |  %s  |  %s  }} {{  .PublishDate  |  %s  }}",
 			discIcon,
 			focusColor,
 			highlightColor,
