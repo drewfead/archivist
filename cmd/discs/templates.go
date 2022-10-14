@@ -14,36 +14,38 @@ const (
 )
 
 var (
-	promptTemplates *promptui.SelectTemplates = &promptui.SelectTemplates{
+	PromptTemplates *promptui.SelectTemplates = &promptui.SelectTemplates{
 		Label: "{{  .  }}:",
 		Active: fmt.Sprintf(
-			"%s  {{  .Name  |  %s  }} {{  .PublishDate  |  %s  }}",
+			"%s {{  .Name  |  %s  }} {{  .PublishDate  |  %s  }}",
 			discIcon,
 			focusColor,
 			faintColor,
 		),
 		Inactive: fmt.Sprintf(
-			"    {{  .Name  |  %s  }} {{  .PublishDate  |  %s  }}",
+			"   {{  .Name  |  %s  }} {{  .PublishDate  |  %s  }}",
 			faintColor,
 			faintColor,
 		),
 		Selected: fmt.Sprintf(
-			"%s  {{  .Name  |  %s  |  %s  }} {{  .PublishDate  |  %s  }}",
+			"%s {{  .Name  |  %s  |  %s  }} {{  .PublishDate  |  %s  }}",
 			discIcon,
 			focusColor,
 			highlightColor,
 			faintColor,
 		),
-	}
-
-	detailTemplate string = `
+		Details: `
 ------- Disc Info -------
 Name: {{  .Name  }}
-Publisher: {{  .Publisher  }}
 Release Year: {{  .ReleaseYear  }}
-Runtime: {{  .Runtime  }}
+Collects: {{  .CollectedMovies  }}
+Publisher: {{  .Publisher  }}
 Publish Date: {{  .PublishDate  }}
-`
+Publish Country: {{  .PublishCountry  }}
+Runtime: {{  .Runtime  }}
+Bluray.com: {{  .BlurayDotComDetailsLink  }}
+`,
+	}
 )
 
 const stdNav = "Use the arrow keys to navigate: ↓ ↑ → ←"
