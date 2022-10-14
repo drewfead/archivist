@@ -41,12 +41,12 @@ func search(ctx context.Context, term string, cfg searchConfig) error {
 		return err
 	}
 
-	promptTemplates.Help = helpForSearchConfig(cfg)
+	PromptTemplates.Help = helpForSearchConfig(cfg)
 
 	prompt := promptui.Select{
 		Label:     "Found discs",
 		Items:     links,
-		Templates: promptTemplates,
+		Templates: PromptTemplates,
 		Stdout:    stdout,
 		IsVimMode: cfg.UseVimBindings,
 		Size:      10,
@@ -69,7 +69,7 @@ func search(ctx context.Context, term string, cfg searchConfig) error {
 		return err
 	}
 
-	outTemplate, err := template.New("detail").Parse(detailTemplate)
+	outTemplate, err := template.New("detail").Parse(PromptTemplates.Details)
 	if err != nil {
 		return err
 	}

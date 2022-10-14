@@ -32,19 +32,23 @@ type BlurayLinks struct {
 }
 
 type BlurayDetails struct {
-	Name        string
-	Publisher   string
-	ReleaseYear string
-	Runtime     string
-	PublishDate string
+	Name            string
+	ReleaseYear     string
+	Publisher       string
+	PublishDate     string
+	PublishCountry  string
+	Runtime         string
+	CollectedMovies string
 }
 
 type Bluray struct {
 	Name                    string
-	Publisher               string
 	ReleaseYear             string
-	Runtime                 string
+	Publisher               string
 	PublishDate             string
+	PublishCountry          string
+	Runtime                 string
+	CollectedMovies         string
 	BlurayDotComBuyID       string
 	BlurayDotComDetailsLink string
 	BlurayDotComImageLink   string
@@ -67,13 +71,15 @@ func (sm searchMessage) MarshalZerologObject(e *zerolog.Event) {
 }
 
 type detailsMessage struct {
-	EndSignal   bool
-	Link        string
-	Name        string
-	Publisher   string
-	PublishDate string
-	Runtime     string
-	ReleaseYear string
+	EndSignal       bool
+	Link            string
+	Name            string
+	ReleaseYear     string
+	Publisher       string
+	PublishDate     string
+	PublishCountry  string
+	Runtime         string
+	CollectedMovies string
 }
 
 func (dm detailsMessage) MarshalZerologObject(e *zerolog.Event) {
@@ -89,10 +95,12 @@ type fullSearchMessage struct {
 	Index                   *int
 	SearchDisplay           string
 	Name                    string
+	ReleaseYear             string
 	Publisher               string
 	PublishDate             string
+	PublishCountry          string
 	Runtime                 string
-	ReleaseYear             string
+	CollectedMovies         string
 	BlurayDotComBuyID       string
 	BlurayDotComDetailsLink string
 	BlurayDotComImageLink   string
@@ -222,6 +230,13 @@ func reduceDetails(msgs []detailsMessage) detailsMessage {
 		if msg.Runtime != "" {
 			out.Runtime = msg.Runtime
 		}
+		if msg.PublishCountry != "" {
+			out.PublishCountry = msg.PublishCountry
+		}
+		if msg.CollectedMovies != "" {
+			out.CollectedMovies = msg.CollectedMovies
+		}
+
 	}
 
 	return out
@@ -229,11 +244,13 @@ func reduceDetails(msgs []detailsMessage) detailsMessage {
 
 func transformDetails(msg detailsMessage) (*BlurayDetails, bool) {
 	out := &BlurayDetails{
-		Name:        msg.Name,
-		Publisher:   msg.Publisher,
-		PublishDate: msg.PublishDate,
-		ReleaseYear: msg.ReleaseYear,
-		Runtime:     msg.Runtime,
+		Name:            msg.Name,
+		Publisher:       msg.Publisher,
+		PublishDate:     msg.PublishDate,
+		PublishCountry:  msg.PublishCountry,
+		ReleaseYear:     msg.ReleaseYear,
+		Runtime:         msg.Runtime,
+		CollectedMovies: msg.CollectedMovies,
 	}
 
 	return out, out.Name != ""
@@ -252,6 +269,8 @@ func detailsToFull(msg detailsMessage) fullSearchMessage {
 		PublishDate:             msg.PublishDate,
 		Runtime:                 msg.Runtime,
 		ReleaseYear:             msg.ReleaseYear,
+		PublishCountry:          msg.PublishCountry,
+		CollectedMovies:         msg.CollectedMovies,
 		Type:                    t,
 	}
 }
@@ -286,6 +305,11 @@ func mergeFullSearch(a, b fullSearchMessage) fullSearchMessage {
 	} else if b.PublishDate != "" {
 		out.PublishDate = b.PublishDate
 	}
+	if a.PublishCountry != "" {
+		out.PublishCountry = a.PublishCountry
+	} else if b.PublishCountry != "" {
+		out.PublishCountry = b.PublishCountry
+	}
 	if a.Runtime != "" {
 		out.Runtime = a.Runtime
 	} else if b.Runtime != "" {
@@ -295,6 +319,11 @@ func mergeFullSearch(a, b fullSearchMessage) fullSearchMessage {
 		out.ReleaseYear = a.ReleaseYear
 	} else if b.ReleaseYear != "" {
 		out.ReleaseYear = b.ReleaseYear
+	}
+	if a.CollectedMovies != "" {
+		out.CollectedMovies = a.CollectedMovies
+	} else if b.CollectedMovies != "" {
+		out.CollectedMovies = b.CollectedMovies
 	}
 	if a.BlurayDotComBuyID != "" {
 		out.BlurayDotComBuyID = a.BlurayDotComBuyID
@@ -354,6 +383,8 @@ func transformFullSearch(msg fullSearchMessage) (Bluray, bool) {
 		ReleaseYear:             msg.ReleaseYear,
 		Runtime:                 msg.Runtime,
 		PublishDate:             msg.PublishDate,
+		PublishCountry:          msg.PublishCountry,
+		CollectedMovies:         msg.CollectedMovies,
 		BlurayDotComBuyID:       msg.BlurayDotComBuyID,
 		BlurayDotComDetailsLink: msg.BlurayDotComDetailsLink,
 		BlurayDotComImageLink:   msg.BlurayDotComImageLink,
@@ -465,46 +496,82 @@ func parseQuicksearchList(errorChannel chan<- error, msgChannel chan<- searchMes
 	}
 }
 
+const (
+	attrTitle                      = "title"
+	attrHRef                       = "href"
+	selectorTitleDisc              = "a.black.noline[data-productid]"
+	selectorTitleDiscCountry       = selectorTitleDisc + " + img"
+	selectorTitleCollection        = "h1"
+	selectorTitleCollectionCountry = selectorTitleCollection + " + img"
+	selectorSubheading             = "span.subheading"
+	selectorSubheadingLink         = selectorSubheading + " > a"
+	selectorRuntime                = "#runtime"
+	selectorMovieInfo              = "#movie_info"
+	selectorMovieInfoDiscLinks     = selectorMovieInfo + " a[data-productid]"
+	linkMatcherPublisher           = "movies.php?studioid"
+	linkMatcherReleaseYear         = "movies.php?year"
+	linkMatcherPublishDate         = "releasedates.php"
+	linkMatcherCollectsDisc        = "/movies/"
+)
+
 func parseDetailsBody(errorChannel chan<- error, msgChannel chan<- detailsMessage) func(*colly.HTMLElement) {
 	return func(h *colly.HTMLElement) {
-		names := h.ChildTexts("a.black.noline[data-productid]")
-		if len(names) == 0 {
-			names = h.ChildTexts("h1")
+		name := h.ChildText(selectorTitleDisc)
+		publishCountry := h.ChildAttr(selectorTitleDiscCountry, attrTitle)
+		if name == "" {
+			name = h.ChildText(selectorTitleCollection)
+			publishCountry = h.ChildAttr(selectorTitleCollectionCountry, attrTitle)
 		}
-		if len(names) == 0 {
+		if name == "" {
 			errorChannel <- fmt.Errorf("details from url(%s): %w", h.Request.URL.String(), ErrMalformedData)
 		}
+
 		publisher := ""
 		publishDate := ""
 		releaseYear := ""
 
-		dataLinks := h.ChildAttrs("span.subheading > a", "href")
-		dataTexts := h.ChildTexts("span.subheading > a")
+		dataLinks := h.ChildAttrs(selectorSubheadingLink, attrHRef)
+		dataTexts := h.ChildTexts(selectorSubheadingLink)
 		for i := 0; i < len(dataLinks); i++ {
 			link := dataLinks[i]
 			text := dataTexts[i]
 
-			if strings.Contains(link, "movies.php?studioid") {
+			if strings.Contains(link, linkMatcherPublisher) {
 				publisher = text
 			}
 
-			if strings.Contains(link, "movies.php?year") {
+			if strings.Contains(link, linkMatcherReleaseYear) {
 				releaseYear = text
 			}
 
-			if strings.Contains(link, "releasedates.php") {
+			if strings.Contains(link, linkMatcherPublishDate) {
 				publishDate = text
 			}
 		}
-		runtime := h.ChildText("#runtime")
+
+		runtime := h.ChildText(selectorRuntime)
+
+		var collected []string
+		collectedLinks := h.ChildAttrs(selectorMovieInfoDiscLinks, attrHRef)
+		collectedTitles := h.ChildAttrs(selectorMovieInfoDiscLinks, attrTitle)
+		for i := 0; i < len(collectedLinks); i++ {
+			link := collectedLinks[i]
+			text := collectedTitles[i]
+
+			if strings.Contains(link, linkMatcherCollectsDisc) {
+				collected = append(collected, text)
+			}
+		}
 
 		msgChannel <- detailsMessage{
-			Link:        h.Request.URL.String(),
-			Name:        names[0],
-			Publisher:   publisher,
-			PublishDate: publishDate,
-			Runtime:     runtime,
-			ReleaseYear: releaseYear,
+			Link:            h.Request.URL.String(),
+			Name:            name,
+			ReleaseYear:     releaseYear,
+			Publisher:       publisher,
+			PublishDate:     publishDate,
+			PublishCountry:  publishCountry,
+			Runtime:         runtime,
+			CollectedMovies: strings.Join(collected, " | "),
 		}
 
 		msgChannel <- detailsMessage{
@@ -668,7 +735,7 @@ func (d *collyLogging) Event(e *debug.Event) {
 }
 
 func FullSearch(ctx context.Context, parallelism uint, searchTerm string) ([]Bluray, error) {
-	maxDataBreadth := 1 // 2 // search hit links, search hit display text, since details are a single width child
+	maxDataBreadth := 1
 	effectiveParallelism := int(parallelism)
 	if effectiveParallelism == 0 {
 		effectiveParallelism = FullSearchMaxParallelism
@@ -682,7 +749,6 @@ func FullSearch(ctx context.Context, parallelism uint, searchTerm string) ([]Blu
 	quicksearch.Limit(&colly.LimitRule{DomainGlob: "*", Parallelism: effectiveParallelism})
 	details := colly.NewCollector(colly.Async(true), colly.MaxDepth(1), colly.Debugger(&collyLogging{}))
 	details.Limit(&colly.LimitRule{DomainGlob: "*", Parallelism: effectiveParallelism})
-	// detailsRequestQueue, _ := queue.New(effectiveParallelism, &queue.InMemoryQueueStorage{MaxSize: 10000})
 	quicksearchJS := otto.New()
 	errorChannel := make(chan error)
 	searchChannel := make(chan searchMessage)
@@ -728,7 +794,6 @@ func FullSearch(ctx context.Context, parallelism uint, searchTerm string) ([]Blu
 				EmbedObject(msg).
 				Msg("received event")
 			if msg.BlurayDotComDetailsLink != "" {
-				// detailsRequestQueue.AddURL(msg.BlurayDotComDetailsLink)
 				details.Visit(msg.BlurayDotComDetailsLink)
 			}
 			if msg.EndSignal {

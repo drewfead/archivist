@@ -3,8 +3,10 @@ module github.com/drewfead/archivist
 go 1.19
 
 require (
+	github.com/biter777/countries v1.5.6
 	github.com/chzyer/readline v0.0.0-20180603132655-2972be24d48e
 	github.com/gocolly/colly/v2 v2.1.0
+	github.com/google/go-cmp v0.4.0
 	github.com/manifoldco/promptui v0.9.0
 	github.com/robertkrimen/otto v0.0.0-20211024170158-b87d35c0b86f
 	github.com/rs/zerolog v1.28.0
